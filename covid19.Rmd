@@ -1,0 +1,348 @@
+---
+title: "COVID-19: Epidemics"
+author: "Daniel Suryakusuma"
+date: "3/10/2019"
+output: html_document
+---
+
+
+```{r setup, message= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(httr)
+library(rvest)
+library(tidyverse)
+library(lubridate)
+library(pdftools)
+library(pdfsearch)
+library(kableExtra)
+qkable <- function(x, height="360px") {
+  x %>% kable(format = "html") %>% kable_styling(bootstrap_options = c("condensed", "responsive", "striped", "hover", "bordered"), font_size = 11, position = "center") %>% scroll_box(width="100%", height= height, fixed_thead =  list(enabled = TRUE, background = "lightgrey") ) 
+}
+```
+
+
+In early stages of infection outbreaks, counts of confirmed cases suggest an underlying exponential growth trend. 
+
+Let's take a closer look. 
+
+
+## Web scraper to compile data from WHO (World Health Organization) daily reports. 
+
+Noticing a pattern in the report URL structure, we might first try to exploit this to quickly get the files we need. 
+
+```{r}
+td <- Sys.Date()
+firstreportdate <- as.Date("2020-01-21")
+number.of.reports <- td - firstreportdate
+
+# generate .pdf url 
+# getReportUrl <- function(date = firstreportdate) {
+#   return( paste0(urlstem, 
+#                  gsub("-", x = date, replacement = ""), 
+#                  "-sitrep-",
+#                  td  - firstreportdate + 1,
+#                  "-2019-ncov.pdf"
+#                  ) )
+# }
+
+# proceeding would be pretty pointless, because it turns out the urls actually change structure mid-way
+
+```
+
+
+But of course, this is dependent upon the World Health Organization keeping up with this structure and not making errors or deviations. 
+
+**It turns out that mid-way, the naming structure changes from 2/10 to 2/11, where `ncov` changes to `covid` in the URL. **
+
+In general, we shouldn't rely on the web structure to have a neat coherent pattern behind its file naming system. 
+
+Instead, let's look at the root page and pull all the urls from it. 
+
+
+```{r}
+# get the .pdf links from webpage
+rooturl <- read_html("https://www.who.int/emergencies/diseases/novel-coronavirus-2019/situation-reports") # all the .pdf links are here
+
+situation.reports <- rooturl %>%
+  html_nodes("a") %>% 
+  html_attr("href") 
+# %>%   filter(!grepl('.pdf'))
+
+situation.reports <- situation.reports[grepl('.pdf',situation.reports)]
+situation.reports <- situation.reports[grepl('coronaviruse/situation-reports/',situation.reports)] %>% unique()  # some links are duplicates
+situation.reports <- paste0("https://www.who.int", situation.reports) # full link
+```
+
+We can check that the number of reports is correct and up to date. This difference should be 0, unless if there's a one-off error due to timezone / reporting lag on behalf of the WHO. 
+
+```{r}
+length(situation.reports) - number.of.reports
+```
+
+
+We can visualize our URLS and check that the dates match up correctly (especially the leap day February 29, thanks to `lubridate`). 
+
+```{r}
+sit.rep <- tibble(date = as.Date("2020-01-20") + 1:length(situation.reports), urls = rev(situation.reports)) 
+sit.rep %>% qkable() 
+```
+
+
+Now we have the list of pdf URLS to parse through and clean up. Let's first download them offline so we can process them offline/faster. 
+
+
+```{r}
+# download offline for processing
+if (! dir.exists("covid-19")) {
+  dir.create("covid-19")
+}
+setwd("covid-19")
+
+for (i in 1:nrow(sit.rep)) {
+  filename <- paste0(getwd(),"/",sit.rep$date[i], ".pdf" )
+  if (!file.exists(filename))
+    download.file(url = sit.rep$urls[i], 
+                  destfile = filename, 
+                  mode = "wb")
+}
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+setwd("covid-19")
+pdf.paths <- paste0(sit.rep$date, ".pdf")
+# getwd()
+
+counts <- sit.rep %>% select(- "urls") %>% mutate(
+              global = 0L,
+              china = 0L,
+              outside_china = 0L,
+              global_new = 0L,
+              china_new = 0L,
+              outside_china = 0L, 
+              global_deaths = 0L
+)
+
+
+# REPORT TYPE A: Older, (actually the web scrape reveals this form was reused from the Zika virus)
+# treat 1 ~ 6 MANUALLY; not worth the investment to automate this because this is an old format
+
+editrow <- function(df, n = 0, global, china, outsidechina) {
+  if ( (n <= nrow(df)) * (n >= 1) ) {
+      df[n, 3:5] <- c(global, china, outsidechina)
+  }
+  return(df)
+}
+
+# manually do first report's data
+counts <- counts %>% editrow(n = 1, 
+                             global = 282, 
+                             china = 278, 
+                             outsidechina = 3)
+# "As of 20 January 2020, 282 confirmed cases of 2019-nCoV have been reported from four countries including China (278 cases), Thailand (2 cases), Japan (1 case) and the Republic of Korea (1 case);"
+
+
+# report 2 : jan 22
+counts <- counts %>% editrow(n = 2,
+                             global = 314,
+                             china = 309,
+                             outsidechina = 4) # mismatch
+
+# report 3: jan 23
+counts <- counts %>% editrow(n = 3,
+                             global = 581,
+                             china = 571,
+                             outsidechina = 10)
+
+# report 4 : jan 24
+counts <- counts %>% editrow(n = 4,
+                             global = 846,
+                             china = 830,
+                             outsidechina = 11) # doesnt add up
+
+# report 5 : jan 25
+counts <- counts %>% editrow(n = 5,
+                             global = 1320,
+                             china = 1297,
+                             outsidechina = 23)
+
+# report 6 : jan 26
+counts <- counts %>% editrow(n = 6,
+                             global = 2014,
+                             china = 1985,
+                             outsidechina = 29)
+
+
+counts %>% qkable()
+
+
+
+# REPORT TYPE B: Current report format
+
+# if (poppler_config()$has_pdf_data) {
+#   for (pdf in pdf.paths) {
+#     
+#   }
+# }
+
+
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+# setwd("covid-19")
+# getwd()
+# tmp <- system.file('pdf', paste0("covid-19/", pdf.paths[7]), 
+                   # package = 'pdfsearch')
+
+tmp <- pdf_text(pdf = paste0("covid-19/", pdf.paths[7]))
+
+# result <- tmp[[1]] %>% 
+#   str_split(pattern = "\\n") 
+# %>% 
+#   grepl(pattern = " confirmed")
+
+# %>%
+#   keyword_search(keyword = c( ' confirmed', ' globally'),
+#                  path = FALSE)
+
+# tmp %>% str_split("\\n") %>% grep("^confirmed")
+
+result <- keyword_search(tmp[[1]], # first page only
+                         keyword = c(" confirmed ", " suspected ", " severe ", " deaths "),
+                         path = FALSE, 
+                         surround_lines = 0
+                         )
+length(result)
+head(result$line_text)
+# result$line_text[1] %>% grep("^confirmed")
+```
+
+
+The data are in *serious* need of cleaning... From the above, we want to select out the "2798 confirmed", "2741 confirmed", "461 severe", "80 deaths", all while knowing what figures these represent exactly. 
+
+
+## Data Cleaning
+
+
+Let's do a custom tailored scrape as proof of concept. 
+
+```{r, warning = FALSE, message = FALSE}
+
+bin <- c()
+mess <- result.n$line_text[1]
+mess
+
+# get global confirmed
+bin <- c(bin, substr(
+  x = mess,
+  start = regexpr(pattern = " confirmed", text = mess) - 10,
+  stop = regexpr(pattern = " confirmed", text = mess) + 9
+) )
+
+# get china confirmed
+mess <- result.n$line_text[2]
+
+bin <- c(bin, substr(
+  x = mess,
+  start = regexpr(pattern = " confirmed", text = mess) - 10,
+  stop = regexpr(pattern = " confirmed", text = mess) + 9
+) )
+
+## get outsidechina confirmed
+mess <- result.n$line_text[3]
+
+bin <- c( bin, substr(
+  x = mess,
+  start = regexpr(pattern = " confirmed", text = mess) - 10,
+  stop = regexpr(pattern = " confirmed", text = mess) + 9
+) )
+
+
+
+
+as.numeric(gsub(pattern =  ".*?([0-9]+).*", replacement =  "\\1", x = bin)) # alternatively just use tidyr's extract_numeric()
+```
+
+Great, this gives us exactly: 
+- Globally 2798 confirmed
+- China 2741 confirmed
+- Outside of China 37 confirmed
+
+We can try to automate, but the WHO keeps changing the structure of the numbers in their pdfs. At this point it would've been faster to manually input these into excel. 
+
+```{r}
+counts %>% mutate(
+ global_deaths = 0,
+ china_deaths = 0,
+ outside_china_deaths = 0
+) # don't care about "suspected" because the WHO drops this metric after report 11
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+# head(result$line_text)
+
+dict <- c(" confirmed", " deaths")
+
+getValues <- function(n) {
+  # pattern : key from dict, such as " confirmed" or " deaths"
+  # n : a particular situation report number (this function only support 7+; I manually filled out the first few)
+  
+  pattern <- dict[1] # confirmed
+
+  parsedsitrep <- pdf_text(pdf = paste0("covid-19/", pdf.paths[n]))
+  result.n <- keyword_search(parsedsitrep[[1]], # care about first page only
+                         keyword = pattern,
+                         path = FALSE, 
+                         surround_lines = 0
+                         )
+  bin <- c()
+
+  for (i in 1:3) { # 1 global, 2 china, 3 outside of china
+    mess <- result.n$line_text[i]
+    bin <- c(bin, substr(x = mess, 
+                         start = regexpr(pattern = pattern, text = mess) - 10,
+                         stop = regexpr(pattern = pattern, text = mess) + 10))
+    count.vec <- as.numeric(gsub(pattern =  ".*?([0-9]+).*", replacement =  "\\1", x = bin))
+  }
+  
+  
+  
+    
+  pattern <- dict[2] # deaths
+  
+  
+  
+
+  return()
+}
+
+
+
+
+
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+# pdf.paths[8] %>%  %>% str_spli
+
+```
+
+
+
+## Cautions against using premature predictions. 
+
+There has been a lot of speculation regarding the future of the novel coronavirus, and for good reason, as the financial markets certainly adjust to news of outbreaks and as many peoples' lives and international plans are modified due to COVID-19 concerns. 
+
+```{r}
+
+```
+
+
+According to this [The Atlantic](https://www.theatlantic.com/technology/archive/2020/03/how-many-americans-really-have-coronavirus/607348/) article, "every country's numbers are the result of a specific set of testing and accounting regimes... even though these inconsistencies are public and plain, people continue to rely on charts showing different numbers... it encourages dangerous behavior such as cutting back testing to bring a country's numbers down or slow-walking testing to keep a country's numbers low. 
