@@ -189,6 +189,16 @@ counts %>% qkable()
 ```
 
 
+
+The data are in *serious* need of cleaning... From the above, we want to select out the "2798 confirmed", "2741 confirmed", "461 severe", "80 deaths", all while knowing what figures these represent exactly. 
+
+
+## Data Cleaning
+
+
+Let's do a custom tailored scrape as proof of concept. 
+
+
 ```{r, warning = FALSE, message = FALSE}
 # setwd("covid-19")
 # getwd()
@@ -218,20 +228,11 @@ head(result$line_text)
 # result$line_text[1] %>% grep("^confirmed")
 ```
 
-
-The data are in *serious* need of cleaning... From the above, we want to select out the "2798 confirmed", "2741 confirmed", "461 severe", "80 deaths", all while knowing what figures these represent exactly. 
-
-
-## Data Cleaning
-
-
-Let's do a custom tailored scrape as proof of concept. 
-
 ```{r, warning = FALSE, message = FALSE}
 
 bin <- c()
-mess <- result.n$line_text[1]
-mess
+mess <- result$line_text[1]
+# mess
 
 # get global confirmed
 bin <- c(bin, substr(
@@ -241,7 +242,7 @@ bin <- c(bin, substr(
 ) )
 
 # get china confirmed
-mess <- result.n$line_text[2]
+mess <- result$line_text[2]
 
 bin <- c(bin, substr(
   x = mess,
@@ -250,15 +251,13 @@ bin <- c(bin, substr(
 ) )
 
 ## get outsidechina confirmed
-mess <- result.n$line_text[3]
+mess <- result$line_text[3]
 
 bin <- c( bin, substr(
   x = mess,
   start = regexpr(pattern = " confirmed", text = mess) - 10,
   stop = regexpr(pattern = " confirmed", text = mess) + 9
 ) )
-
-
 
 
 as.numeric(gsub(pattern =  ".*?([0-9]+).*", replacement =  "\\1", x = bin)) # alternatively just use tidyr's extract_numeric()
@@ -285,11 +284,10 @@ counts %>% mutate(
 
 dict <- c(" confirmed", " deaths")
 
-getValues <- function(n) {
+getValues <- function(n, pattern) {
   # pattern : key from dict, such as " confirmed" or " deaths"
   # n : a particular situation report number (this function only support 7+; I manually filled out the first few)
   
-  pattern <- dict[1] # confirmed
 
   parsedsitrep <- pdf_text(pdf = paste0("covid-19/", pdf.paths[n]))
   result.n <- keyword_search(parsedsitrep[[1]], # care about first page only
@@ -306,26 +304,17 @@ getValues <- function(n) {
                          stop = regexpr(pattern = pattern, text = mess) + 10))
     count.vec <- as.numeric(gsub(pattern =  ".*?([0-9]+).*", replacement =  "\\1", x = bin))
   }
-  
-  
-  
-    
-  pattern <- dict[2] # deaths
-  
-  
-  
 
-  return()
+  return(count.vec)
 }
 
 
+# placeValues <- 
+
+getValues(7, " confirmed")
+getValues(7, " deaths")
 
 
-
-```
-
-
-```{r, warning = FALSE, message = FALSE}
 ```
 
 
