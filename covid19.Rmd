@@ -309,10 +309,17 @@ getValues <- function(n, pattern) {
 }
 
 
-# placeValues <- 
+# placeValues <- function()
 
 getValues(7, " confirmed")
 getValues(7, " deaths")
+
+
+# reports always have 3 instances of 
+placements <- sum( is.na( getValues(7, " deaths") ))
+if ( placements == 1 ) { # only have 
+  # 
+}
 
 
 ```
