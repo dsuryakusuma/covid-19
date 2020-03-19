@@ -1,7 +1,7 @@
 ---
-title: "COVID-19: Epidemics"
+title: "COVID-19 Epidemic: An Exploratory Data Analysis and Signal Extraction for Projecting Ultimate Counts"
 author: "Daniel Suryakusuma"
-date: "3/10/2019"
+date: "3/18/2019"
 output: html_document
 ---
 
@@ -15,6 +15,7 @@ library(lubridate)
 library(pdftools)
 library(pdfsearch)
 library(kableExtra)
+
 qkable <- function(x, height="360px") {
   x %>% kable(format = "html") %>% kable_styling(bootstrap_options = c("condensed", "responsive", "striped", "hover", "bordered"), font_size = 11, position = "center") %>% scroll_box(width="100%", height= height, fixed_thead =  list(enabled = TRUE, background = "lightgrey") ) 
 }
@@ -24,6 +25,8 @@ qkable <- function(x, height="360px") {
 In early stages of infection outbreaks, counts of confirmed cases suggest an underlying exponential growth trend. 
 
 Let's take a closer look. 
+
+<img align="center" width = "40%" src="/Users/dsury/covid-19/images/WHO-scrape.png">
 
 
 ## Web scraper to compile data from WHO (World Health Organization) daily reports. 
@@ -176,7 +179,7 @@ counts <- counts %>% editrow(n = 6,
                              outsidechina = 29)
 
 
-counts %>% qkable()
+# counts %>% qkable()
 
 
 ```
@@ -274,23 +277,37 @@ getValues <- function(n, pattern) {
                            path = FALSE,
                            surround_lines = 0)
 
+  # txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
+  # txt <- txt %>% str_split(pattern = " China ") #### maybe remove
+  # txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
+  
   txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
-  txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
+  txt <- txt %>% str_split(pattern = " China ", simplify = FALSE)
+  txt <- txt %>% str_split(pattern = "•", simplify = FALSE, n = 2)
 
+
+  bin <- c()
+  
   for (i in 1:length(txt)) {
     for (j in 1:length(txt[[i]])) {
           mess <- txt[[i]][j]
           bin <- c(bin, substr(x = mess, 
-                           start = regexpr(pattern = pattern, text = mess) - ifelse(pattern == " deaths ", 5, 10), # dont expect deaths to increase over 99,999 yet so minimize chance of picking up extraneous numbers
-                           stop = regexpr(pattern = pattern, text = mess) + nchar(pattern)))
+                           start = regexpr(pattern = pattern, text = mess) - ifelse(pattern == " deaths ", 5, 8), # dont expect deaths to increase over 99,999 yet so minimize chance of picking up extraneous numbers
+                           stop = regexpr(pattern = pattern, text = mess) + nchar(pattern) - 1))
     }
   }
 
   if ( pattern == " deaths " ) {
-    count.vec <- bin %>% str_split(pattern = " ") %>% keep_numeric()
-    count.vec <- count.vec[!is.na(count.vec)]
+    count.vec <- bin %>%
+      gsub(pattern = "\\.", replacement = "") %>%
+      str_split(pattern = " ") %>%
+      keep_numeric()
+    count.vec <- count.vec[!is.na(count.vec)] %>% tail(3)
   } else if (pattern == " confirmed ") {
-    count.vec <- bin %>% str_split(pattern = " ") %>%  extract_numeric() # depreciated but better than parse_number()
+    count.vec <- bin %>%
+      gsub(pattern = "\\.", replacement = "") %>%
+      str_split(pattern = " ") %>%
+      extract_numeric() # depreciated but better than parse_number()
     count.vec <- count.vec[!is.na(count.vec)] %>% tail(3)
   }
   
@@ -310,63 +327,77 @@ keep_numeric <- function( obj ) {
   return(keep)
 }
 
-getValues( n = 56, pattern = " confirmed " )
-getValues( n = 56, pattern = " deaths ")
 
 ```
 
 Here's a working example, where there are 1381 deaths in China by February 14 and 2 deaths outside of China.
 
 ```{r, warning = FALSE, message = FALSE}
-# troubleshooting for 3rd confirmed
-n <- 25
-pattern <- " deaths "
+getValues( n = 56, pattern = " confirmed " )
+getValues( n = 56, pattern = " deaths ")
+```
+
+
+```{r, warning = FALSE, message = FALSE, eval = FALSE}
+
+# troubleshooting & debugging for 3rd confirmed
+n <- 28
+pattern <- " confirmed "
 bin <- c()
 
 parsedsitrep <- pdf_text(pdf = paste0("covid-19/", pdf.paths[n]))
 
-result.n <- keyword_search(parsedsitrep[[1]],
+result.n <- keyword_search(parsedsitrep[[1]], # only first page
                            keyword = pattern,
                            path = FALSE,
                            surround_lines = 0)
 
 txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
-txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
+txt <- txt %>% str_split(pattern = "laboratory", simplify = FALSE)
+txt <- txt %>% str_split(pattern = " China ", simplify = FALSE)
+# txt <- txt %>% str_split(pattern = "•", simplify = FALSE, n = 2)
+# txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
 # txt
 
 for (i in 1:length(txt)) {
   for (j in 1:length(txt[[i]])) {
         mess <- txt[[i]][j]
-        bin <- c(bin, substr(x = mess, 
+        bin <- c(bin, substr(x = mess,
                          start = regexpr(pattern = pattern, text = mess) - ifelse(pattern == " deaths ", 5, 10), # dont expect deaths to increase over 99,999 yet so minimize chance of picking up extraneous numbers
                          stop = regexpr(pattern = pattern, text = mess) + nchar(pattern)))
   }
 }
 
 if ( pattern == " deaths " ) {
-  count.vec <- bin %>% str_split(pattern = " ") %>% keep_numeric()
-  count.vec <- count.vec[!is.na(count.vec)]
-  count.vec
-} else if (pattern == " confirmed ") {
-  count.vec <- bin %>% str_split(pattern = " ") %>%  extract_numeric() # depreciated but better than parse_number()
+  count.vec <- bin %>%
+    gsub(pattern = "\\.", replacement = "") %>%
+    str_split(pattern = " ") %>%
+    keep_numeric()
+} else if (pattern == " confirmed " ) {
+  count.vec <- bin %>%
+    gsub(pattern = "\\.", replacement = "") %>%
+    str_split(pattern = " ") %>%
+    extract_numeric() # depreciated but better than parse_number()
 }
 
+count.vec <- count.vec[!is.na(count.vec)]
+count.vec
 
-
+# txt
 ```
 
 
-
-```{r, warning = FALSE, message = FALSE}
+```{r, warning = FALSE, message = FALSE, output = FALSE}
 # 
 
 for ( i in 7:(nrow(counts)) ) {
   print(paste("Now parsing", counts$date[i]))
+  
   current.confirmed <- getValues(i, " confirmed ")
   current.deaths <-  getValues(i, " deaths ")
 
-  # reports always have 3 instances of "confirmed" metrics
-  instances.confirmed <- sum( is.na( current.confirmed ))
+  # CONFIRMED CASES - reports always have 3 instances of "confirmed" metrics
+  instances.confirmed <- sum( !is.na( current.confirmed ))
   if ( instances.confirmed != 3) {
     warning('Cannot find 3 instances of \'confirmed\' metrics in report.')
   } else {
@@ -375,32 +406,127 @@ for ( i in 7:(nrow(counts)) ) {
     counts$outside_china[i] <- current.confirmed[3]
   }
   
-  instances.deaths <- sum( is.na( current.deaths ))
+  # DEATHS - 
+  instances.deaths <- sum( !is.na( current.deaths ))
   if ( instances.deaths == 1 ) { # only have china deaths
     counts$china_deaths[i] <- current.deaths[1]
   } else if ( instances.deaths == 2 ) {
     counts$china_deaths[i] <- current.deaths[1]
     counts$outside_china_deaths[i] <- current.deaths[2]
   } else if ( instances.deaths == 3 ) {
-    counts$global_deaths <- current.deaths[1]
-    counts$china_deaths <- current.deaths[2]
-    counts$outside_china_deaths <- current.deaths[3]
+    counts$global_deaths[i] <- current.deaths[1]
+    counts$china_deaths[i] <- current.deaths[2]
+    counts$outside_china_deaths[i] <- current.deaths[3]
   }
   
 }
-
-
-
-getValues(46, " confirmed")
-
 ```
 
 
-```{r, warning = FALSE, message = FALSE}
-# pdf.paths[8] %>%  %>% str_spli
+```{r, warning = FALSE, message = FALSE, output = FALSE}
+counts %>% qkable()
 
 ```
 
+Most entries are correct, but we still need a considerable amount of cleaning. We find out this is because the WHO decide to use the term `"laboratory-confirmed"` instead of `"confirmed"` for a few, and generally, scraping from PDF sidebars like these can be difficult. 
+
+Then just starting March 17, the reports stopped publishing metrics with `Global`, `China` and `Outside of China` metrics. Instead, the numbers are broken down into:
+
+- Globally
+- Western Pacific Region
+- European Region
+- South-East Asia
+- Eastern Mediterranean Region
+- Regions of the Americas
+- African Region
+
+
+At this point it really is faster to work in Excel. 
+
+
+```{r, warning = FALSE, message = FALSE, eval = FALSE}
+setwd("covid-19")
+
+csvfilename <- paste0(getwd(), "/", 
+                      substring(td, first = nchar(td) + 1, last = nchar(td) + 5), 
+                      ".csv")
+if (!file.exists(csvfilename)) {
+  write_excel_csv(x = counts,
+                  path = csvfilename)
+} else {
+  print( paste( ".csv for ", td, "already exists.") )
+}
+```
+
+
+```{r, warning = FALSE, message = FALSE, message = FALSE}
+covid <- as_tibble(read_csv(file = paste0(getwd(), "/covid-19/scrape-cleaned.csv")))
+# covid <- head(scrape_cleaned, nrow(scrape_cleaned) - 2) # handle this with NA's instead 
+covid$date <- mdy("1-20-2020") + 1:nrow(covid) # fix dates from csv
+
+covid %>% qkable()
+```
+
+
+## Data Prep
+
+
+```{r}
+covid.confirmed <- covid %>% 
+  select(c('date', 'global', 'china', 'outside_china')) %>% 
+  pivot_longer( cols = - c('date'), names_to = 'region', values_to = 'count' )
+
+covid.deaths <- covid %>%
+  select(c('date', 'global_deaths', 'china_deaths', 'outside_china_deaths')) %>%
+  pivot_longer( cols = - c('date'), names_to = 'region', values_to = 'count')
+
+# set factor levels for plotting order
+covid.confirmed$region <- factor(covid.confirmed$region, levels = c("global", "china", "outside_china"))
+covid.deaths$region <- factor(covid.deaths$region, levels = c("global_deaths", "china_deaths", "outside_china_deaths"))
+
+
+# change 0's in counts to NA to not be plotted (starting 3-17-2020, we only use global data)
+covid.confirmed$count <- covid.confirmed$count %>% na_if(y = 0)
+
+
+covid.confirmed %>% qkable()
+covid.deaths %>% qkable()
+```
+
+## Quick Data Visualization
+
+
+```{r, warning = FALSE}
+covid.confirmed %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Confirmed Counts, Reported by WHO')
+
+covid.confirmed %>% ggplot() + geom_point(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Confirmed Counts, Reported by WHO') + facet_grid( ~ `region`)
+
+
+```
+
+True to the plots, there was a huge discontinuous jump in the reported numbers of confirmed counts from February 16 to February 17. 
+
+From Situation Report 28 on February 17, we see an explanation:
+
+> "From today, WHO will be reporting all confirmed cases, including both
+laboratory-confirmed as previously reported, and those reported as clinically
+diagnosed (currently only applicable to Hubei province, China). From 13
+February through 16 February, we reported only laboratory confirmed cases
+for Hubei province as mentioned in the situation report published on 13
+February. The change in reporting is now shown in the figures. This accounts
+for the apparent large increase in cases compared to prior situation reports. 
+
+It's important to understand this change in reporting before conducting estimations and projections. 
+
+```{r}
+covid.deaths %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Death Counts, Reported by WHO')
+```
+
+There certainly are signs of stabilization in death counts within China, but it is of course still too early to say this conclusively. Notice that the cumulatie number of deaths outside of china has surpassed that from within China, and as such, the World Health Organization has changed its reporting structure to offer data at a much finer granularity. 
+
+```{r}
+
+```
 
 
 ## Cautions against using premature predictions. 
@@ -413,3 +539,38 @@ There has been a lot of speculation regarding the future of the novel coronaviru
 
 
 According to this [The Atlantic](https://www.theatlantic.com/technology/archive/2020/03/how-many-americans-really-have-coronavirus/607348/) article, "every country's numbers are the result of a specific set of testing and accounting regimes... even though these inconsistencies are public and plain, people continue to rely on charts showing different numbers... it encourages dangerous behavior such as cutting back testing to bring a country's numbers down or slow-walking testing to keep a country's numbers low. 
+
+Special attention needs to be paid towards policy shifts such as the recent lockdowns, curfews, and transitions. 
+
+
+## Near-Future Direction
+
+
+Because the total number of cases is only determined by actual tests, we should expect there to be a great deal of noise obscuring the true "signal". Any model we run should add a potential "noise" factor in the estimation, perhaps by adding a random number of cases at each data point that is relative to the population in consideration (i.e. add a number of possible cases in percentage to the population of the country). 
+
+The following is a minor consideration, but aradoxically, if there are more cases than reported, then perhaps some areas are saturated with infected people. We can add a bias factor in the prediction that "underestimates" the value in order to add in this consideration.
+
+We must of course add an "improvement factor" accounting for the discontinuity in reported numbers as (presumably) 
+
+## Model Selection
+
+Because we are only in the early phase of the outbreak on a global scale, we want to consider a few models:
+
+**Generalized Logistic Model:**
+$$\frac{d C(t)}{dt} = r C^p (t) \left( 1 - \frac{C(t)}{K}\right)$$
+
+**Logistic Growth Model:**
+$$ \frac{d C(t)}{dt} = r C(t) \left( 1 - \frac{C(t)}{K}\right)$$
+
+
+**Generalized Growth Model**
+$$\frac{d C(t)}{dt} = r C^p (t) $$
+
+
+
+#### Assumptions and Remarks:
+
+The generalized growth model can let us tune to sub-exponential growth of the COVID-19 outbreak in the early phase; however, it fails to describe the decay of the incedence rate. We can use this as a rough upper bound for our estimation, assuming that the outbreak continues to grow at a rate representated by historical data. 
+
+Because the Logistic Growth Model and Generalized Logistic Model assume a logistic decay of the growth rate along the time horizon, we should expect these Logistic models to provide a lower bound estimate for future counts. The Generalized Logistic Model allows for an early sub-exponential growth and is better suited to explain asymmetries in the growth and decay (and may better capture government policy efforts with isolation, quarantine and lockdown). 
+
