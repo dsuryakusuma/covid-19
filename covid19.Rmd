@@ -15,6 +15,8 @@ library(lubridate)
 library(pdftools)
 library(pdfsearch)
 library(kableExtra)
+library(jsonlite)
+
 
 qkable <- function(x, height="360px") {
   x %>% kable(format = "html") %>% kable_styling(bootstrap_options = c("condensed", "responsive", "striped", "hover", "bordered"), font_size = 11, position = "center") %>% scroll_box(width="100%", height= height, fixed_thead =  list(enabled = TRUE, background = "lightgrey") ) 
@@ -334,7 +336,7 @@ Here's a working example, where there are 1381 deaths in China by February 14 an
 
 ```{r, warning = FALSE, message = FALSE}
 getValues( n = 56, pattern = " confirmed " )
-getValues( n = 56, pattern = " deaths ")
+getValues( n = 56, pattern = " deaths " )
 ```
 
 
@@ -428,6 +430,24 @@ counts %>% qkable()
 
 ```
 
+```{r, include = FALSE, eval = FALSE}
+# case question regarding elasticity as given by Jie from Mercury Insurance
+
+new_a <-  500 * 1000 * .40
+new_b <- (500 * 6/5) * (1000 - 600) * .5
+
+
+new_b - new_a
+
+
+renewal_a <- 500 * 1000 * .6
+renewal_b <- (500 * 4/5) * (1000 + 400) * .5
+
+renewal_b - renewal_a
+
+```
+
+
 Most entries are correct, but we still need a considerable amount of cleaning. We find out this is because the WHO decide to use the term `"laboratory-confirmed"` instead of `"confirmed"` for a few, and generally, scraping from PDF sidebars like these can be difficult. 
 
 Then just starting March 17, the reports stopped publishing metrics with `Global`, `China` and `Outside of China` metrics. Instead, the numbers are broken down into:
@@ -447,9 +467,23 @@ At this point it really is faster to work in Excel.
 ```{r, warning = FALSE, message = FALSE, eval = FALSE}
 setwd("covid-19")
 
-csvfilename <- paste0(getwd(), "/", 
-                      substring(td, first = nchar(td) + 1, last = nchar(td) + 5), 
-                      ".csv")
+extract_MMDD <- function(input_date = Sys.Date() ) {
+  # input_date : like Sys.Date() "2020-03-25" format
+  return(substring(input_date, first = nchar(input_date) + 1, last = nchar(input_date) + 5))
+}
+
+# csvfilename <- paste0(getwd(), "/", extract_MMDD(), ".csv")
+
+update_csv <- function(path_to_file = paste0(getwd(), "/", extract_MMDD(), ".csv")) {
+  
+  if (!file.exists(path_to_file)) {
+    write_excel_csv(x = counts, 
+                    path = path_to_file)
+  } else {
+    print( paste( ".csv for ",  ) )
+  }
+}
+
 if (!file.exists(csvfilename)) {
   write_excel_csv(x = counts,
                   path = csvfilename)
@@ -497,9 +531,9 @@ covid.deaths %>% qkable()
 
 
 ```{r, warning = FALSE}
-covid.confirmed %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Confirmed Counts, Reported by WHO')
+covid.confirmed %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('COVID-19 Confirmed Counts, Reported by WHO')
 
-covid.confirmed %>% ggplot() + geom_point(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Confirmed Counts, Reported by WHO') + facet_grid( ~ `region`)
+covid.confirmed %>% ggplot() + geom_point(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('COVID-19 Confirmed Counts, Reported by WHO') + facet_grid( ~ `region`)
 
 
 ```
@@ -524,9 +558,61 @@ covid.deaths %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `re
 
 There certainly are signs of stabilization in death counts within China, but it is of course still too early to say this conclusively. Notice that the cumulatie number of deaths outside of china has surpassed that from within China, and as such, the World Health Organization has changed its reporting structure to offer data at a much finer granularity. 
 
+
+## Using Global Cross-verified Data
+
+Most developers and researchers are using data gathered and provided by either the team at [Johns Hopkins CSSE](https://github.com/CSSEGISandData/COVID-19) or cleaned and normalized data from [DataHub](https://datahub.io/core/covid-19). 
+
+Let's first take a look at DataHub's timeseries data. 
+
+
 ```{r}
+#from DataHub
+json_file <- 'https://datahub.io/core/covid-19/datapackage.json'
+json_data <- fromJSON(paste(readLines(json_file), collapse=""))
+
+# get list of all resources:
+print(json_data$resources$name)
+
+# print all tabular data(if exists any)
+for (i in 1:length(json_data$resources$datahub$type)) {
+  if (json_data$resources$datahub$type[i] == 'derived/csv') {
+    path_to_file = json_data$resources$path[i]
+    data <- read.csv(url(path_to_file))
+    print(data)
+  }
+}
 
 ```
+
+```{r, message = FALSE, warning = FALSE}
+setwd("covid-19")
+td <- Sys.Date()
+
+
+covid_combined <- as_tibble(read_csv(file =  "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv"))
+
+covid_combined %>% slice(1:50) %>% qkable()
+
+# "https://datahub.io/core/covid-19/r/worldwide-aggregated.csv"
+# "https://datahub.io/core/covid-19/r/countries-aggregated.csv"
+
+covid_keycountries_counts <- as_tibble( read_csv("https://datahub.io/core/covid-19/r/key-countries-pivoted.csv") )
+
+# covid_keycountries %>% slice(1:50) %>% qkable()
+
+
+covid_keycountries_counts %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) )
+
+
+covid_keycountries_counts_pivoted %>%  
+  ggplot() + geom_line(aes(x = Date, y = `Confirmed Counts`, color = Regions))
+
+covid_keycountries_counts %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) ) + facet_wrap( ~ Region)
+
+
+```
+
 
 
 ## Cautions against using premature predictions. 
@@ -548,7 +634,7 @@ Special attention needs to be paid towards policy shifts such as the recent lock
 
 Because the total number of cases is only determined by actual tests, we should expect there to be a great deal of noise obscuring the true "signal". Any model we run should add a potential "noise" factor in the estimation, perhaps by adding a random number of cases at each data point that is relative to the population in consideration (i.e. add a number of possible cases in percentage to the population of the country). 
 
-The following is a minor consideration, but aradoxically, if there are more cases than reported, then perhaps some areas are saturated with infected people. We can add a bias factor in the prediction that "underestimates" the value in order to add in this consideration.
+The following is a minor consideration, but paradoxically, if there are more cases than reported, then perhaps some areas are saturated with infected people. We can add a bias factor in the prediction that "underestimates" the value in order to add in this consideration.
 
 We must of course add an "improvement factor" accounting for the discontinuity in reported numbers as (presumably) 
 
