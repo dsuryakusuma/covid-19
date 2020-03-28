@@ -11,9 +11,11 @@ library(lubridate)
 
 library(kableExtra)
 
-td <- Sys.Date()
 
-## fetch data from DataHub
+########### DATA PRE-PROCESSING  #############
+
+td <- Sys.Date()
+## fetch and reshape data from DataHub
 
 covid_combined <- as_tibble(read_csv(file =  "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv"))
 covid_keycountries_counts <- as_tibble( read_csv("https://datahub.io/core/covid-19/r/key-countries-pivoted.csv") )
@@ -42,7 +44,6 @@ covid_keycountries_counts <- covid_keycountries_counts %>% select(c(Date, rankin
 
 
 
-
 plotConfirmed <- covid_keycountries_counts_pivoted %>% 
   plot_ly(
     x = ~ Date,
@@ -50,9 +51,6 @@ plotConfirmed <- covid_keycountries_counts_pivoted %>%
     color = ~ Regions,
     mode = 'lines'
   ) %>% layout(legend = list(x = 0, y = 1, font = list(size = 8), bgcolor = "#F2F2F2"))
-
-# plotConfirmed
-
 
 
 
@@ -84,9 +82,16 @@ covid_keycountries_counts_pivoted$Regions <- covid_keycountries_counts_pivoted$R
 covid_keycountries_counts_pivoted %>%   ggplot() + geom_line(aes(x = Date, y = `Confirmed Counts`, color = Regions))
 
 
+# general styling
+colors <- list(
+  background = '#111111',
+  text = '#7FDBFF'
+)
 
 
-## Dash Web App
+
+################### DASH WEB APP ###################
+
 app <- Dash$new(external_stylesheets = 
                   # "https://files.dsury.com/css/lux/bootstrap.min.css"
                   "https://codepen.io/chriddyp/pen/bWLwgP.css"
@@ -144,14 +149,9 @@ if (region == 'Global') {
 
 ### cleaner implementation of app
 
-colors <- list(
-  background = '#111111',
-  text = '#7FDBFF'
-)
-
 
 # current death count
-deathCounts <- htmlDiv(  htmlH1(children = Ndeaths),
+deathCounts <- htmlDiv(  htmlH1(children = N.deaths),
   htmlBr(),
   htmlH1('deaths due to COVID-19 by'),
   htmlBr(),
@@ -202,9 +202,11 @@ app$layout(
       casesPlot,
       deathPlot
     ),
-    style = list(backgroundColor = colors$background, 
-                 textAlign = 'center',
-                 color = colors$text)
+    style = list(
+      # backgroundColor = colors$background, 
+      # color = colors$text,
+                 textAlign = 'center'
+                 )
   )
 )
 

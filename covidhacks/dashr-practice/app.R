@@ -1,3 +1,4 @@
+# library(plotly)
 library(dash)
 library(dashCoreComponents)
 library(dashHtmlComponents)
@@ -22,23 +23,29 @@ thing2 <- list(
   htmlDiv(id="output-container")
 )
 
-
-app$layout(
-  htmlDiv( thing2,
-           thing1
-    # put this htmlDiv and dccInput together in a list 
-      # INSIDE another htmlDiv
-      # providing children to this would be overwritten by the callback anyway
-    )
+sliderthing <- list(
+  dccSlider(
+    id = 'my-slider',
+    min = -20,
+    max = 20, 
+    step = 1,
+    value = 5
+  ),
+  htmlDiv(id = 'slider-output-container')
 )
 
 
-# dropdown
-app$callback(output('output-container', 'children'),
-             params = list(input('my-dropdown', 'value')),
-             function(dropdown_value) {
-               sprintf("You have selected \"%s\"", dropdown_value)
-             })
+app$layout(
+  htmlDiv( thing1,
+    # put this htmlDiv and dccInput together in a list 
+      # INSIDE another htmlDiv
+      # providing children to this would be overwritten by the callback anyway
+    ),
+  htmlDiv( thing2),
+  htmlDiv( sliderthing)
+)
+
+
 
 # text box
 app$callback(
@@ -46,7 +53,27 @@ app$callback(
   params = list(input(id='my-id',
                       property='value')),
   function(input_value) {
-    sprintf("You've entered \"%s\"", input_value)
+    sprintf("textbox value is \"%s\"", input_value)
   })
+
+# dropdown
+app$callback(
+  output('output-container', 'children'),
+             params = list(input('my-dropdown', 'value')),
+             function(dropdown_value) {
+               sprintf("dropdown value is \"%s\"", dropdown_value)
+             })
+
+#slider callback
+
+
+app$callback(
+  output(id = 'slider-output-container', property = 'children'),
+  params=list(input(id = 'my-slider', property = 'value')),
+  function(value) {
+    sprintf("slider value is %0.1f", value)
+  })
+
+
 
 app$run_server()
