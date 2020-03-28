@@ -1,0 +1,56 @@
+---
+title: "COVIDHACKS.IO"
+author: "Daniel Suryakusuma"
+date: "3/27/2019"
+output: html_document
+---
+
+```{r setup, message= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(httr)
+# library(rvest)
+library(tidyverse)
+library(lubridate)
+# library(pdftools)
+# library(pdfsearch)
+library(kableExtra)
+# library(jsonlite)
+
+
+
+library(plotly)
+library(dash)
+library(dashCoreComponents)
+library(dashHtmlComponents)
+
+
+
+qkable <- function(x, height="360px") {
+  x %>% kable(format = "html") %>% kable_styling(bootstrap_options = c("condensed", "responsive", "striped", "hover", "bordered"), font_size = 11, position = "center") %>% scroll_box(width="100%", height= height, fixed_thead =  list(enabled = TRUE, background = "lightgrey") ) 
+}
+```
+
+```{r}
+# getwd()
+
+setwd("covid-19")
+td <- Sys.Date()
+
+
+covid_combined <- as_tibble(read_csv(file =  "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv"))
+
+covid_combined %>% slice(1:50) %>% qkable()
+
+# "https://datahub.io/core/covid-19/r/worldwide-aggregated.csv"
+# "https://datahub.io/core/covid-19/r/countries-aggregated.csv"
+
+covid_keycountries <- as_tibble( read_csv("https://datahub.io/core/covid-19/r/key-countries-pivoted.csv") )
+
+# covid_keycountries %>% slice(1:50) %>% qkable()
+
+
+covid_keycountries %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) )
+
+covid_keycountries %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) ) + facet_wrap( ~ Region)
+```
+
