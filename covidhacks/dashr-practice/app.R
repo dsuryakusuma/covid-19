@@ -1,77 +1,115 @@
-library(tidyverse)
 library(dash)
 library(dashCoreComponents)
 library(dashHtmlComponents)
-
-
-df <- read.csv(file = "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv", stringsAsFactor=FALSE, check.names=FALSE) %>% as_tibble()
-
-continents <- unique(df$continent)
-years <- unique(df$year)
-
-
-#################################
+library(dplyr)
 
 app <- Dash$new()
 
+df <- read.csv(
+  file = 'https://gist.githubusercontent.com/chriddyp/cb5392c35661370d95f300086accea51/raw/8e0768211f6b747c0db42a9ce9a0937dafcbd8b2/indicators.csv',
+  stringsAsFactor=FALSE
+) %>% as_tibble()
 
-graph.and.slider <- list(
-  dccGraph(id = 'graph-with-slider'), # has 'figure' property
-  dccSlider(
-    id = 'year-slider',
-    min = 0,
-    max = length(years) - 1,
-    marks = years,
-    value = 0 # <------ input of app (adjusted by slider)
-  )
+available_indicators <- unique(df$Indicator.Name)
+years <- unique(df$Year)
+len_years <- length(years)
+
+option_indicator <- lapply(available_indicators,
+                           function(available_indicator) {
+                             
+                             list(label = available_indicator,
+                                  value = available_indicator)
+                           }
 )
 
-###########  slider  #############
-
-# dccSlider starts from 0;
 app$layout(
-  htmlDiv(
-    graph.and.slider
-  )
+  htmlDiv(list(
+    htmlDiv(list(
+      htmlDiv(list(
+        dccDropdown(
+          id = 'xaxis-column',
+          options = option_indicator,
+          value = 'Fertility rate, total (births per woman)'
+        ),
+        dccRadioItems(
+          id = 'xaxis-type',
+          options = list(list(label = 'Linear', value = 'linear'),
+                         list(label = 'Log', value = 'log')),
+          value = 'linear',
+          labelStyle = list(display = 'inline-block')
+        )
+      ), style = list(width = '48%', display = 'inline-block')),
+      htmlDiv(list(
+        dccDropdown(
+          id = 'yaxis-column',
+          options = option_indicator,
+          value = 'Life expectancy at birth, total (years)'
+        ),
+        dccRadioItems(
+          id = 'yaxis-type',
+          options = list(list(label = 'Linear', value = 'linear'),
+                         list(label = 'Log', value = 'log')),
+          value = 'linear',
+          labelStyle = list(display = 'inline-block')
+        )
+      ), style = list(width = '48%', float = 'display', display = 'inline-block'))
+    )),
+    dccGraph(id = 'indicator-graphic'),
+    dccSlider(
+      id = 'year--slider',
+      min = 0,
+      max = len_years - 1,
+      marks = years,
+      value = len_years - 1
+    )
+  ))
 )
 
 app$callback(
-  output = list(id='graph-with-slider', property='figure'),  ## puts it back into the figure?
-  params = list(input(id='year-slider', property='value')), ## input params
-  
-  function(selected_year_index) {
+  output = list(id='indicator-graphic', property='figure'),
+  params = list(input(id='xaxis-column', property='value'),
+                input(id='yaxis-column', property='value'),
+                input(id='xaxis-type', property='value'),
+                input(id='yaxis-type', property='value'),
+                input(id='year--slider', property='value')),
+  function(xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, year_value) {
     
-    which_year_is_selected <- which(df$year == years[selected_year_index + 1])
+    df %>%
+      dplyr::filter(Year == years[year_value + 1],
+                    Indicator.Name %in% c(xaxis_column_name,
+                                          yaxis_column_name))  %>%
+      droplevels() %>%
+      split(., .$Indicator.Name) -> data_by_indicator
     
-    # recall lapply(lst, fun) just returns a list of the function evaluated at the values of that list
-    traces <- lapply(
-      continents,
-      function(cont) { # for each cont in continents
-           which_continent_is_selected <- which(df$continent == cont)
-           
-           df_sub <- df[intersect(which_year_is_selected, which_continent_is_selected), ]
-           
-           with(df_sub,
-                 list(
-                   x = gdpPercap, y = lifeExp,
-                   opacity=0.5, text = country, mode = 'markers',
-                   marker = list(size = 15, line = list(width = 0.5, color = 'white')),
-                   name = cont
-                 )
-           )
-     }
+    merge(data_by_indicator[[1]], data_by_indicator[[2]], by = "Country.Name") %>%
+      dplyr::transmute(x = Value.x, y = Value.y, text = Country.Name) %>%
+      na.omit() %>%
+      as.list() -> filtered_df
+    
+    inputData <- list(
+      c(
+        filtered_df,
+        list(
+          opacity=0.7,
+          mode = 'markers',
+          marker = list(
+            size = 15,
+            line = list(width = 0.5, color = 'white')
+          )
+        )
+      )
     )
     
-    return(list(
-      data = traces,
-      layout= list(
-        xaxis = list(type = 'log', title = 'GDP Per Capita'),
-        yaxis = list(title = 'Life Expectancy', range = c(20,90)),
-        margin = list(l = 40, b = 40, t = 10, r = 10),
-        legend = list(x = 0, y = 1),
+    list(
+      data = inputData,
+      layout = list(
+        xaxis = list('title' = xaxis_column_name, 'type' = xaxis_type),
+        yaxis = list('title' = yaxis_column_name, 'type' = yaxis_type),
+        margin = list('l' = 40, 'b' = 40, 't' = 10, 'r' = 10),
+        legend = list('x' = 0, 'y' = 1),
         hovermode = 'closest'
       )
-    ))
+    )
   }
 )
 
