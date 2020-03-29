@@ -12,7 +12,7 @@ library(lubridate)
 library(kableExtra)
 
 
-########### DATA PRE-PROCESSING  #############
+########### DATA PRE-PROCESSING & GLOBAL VARIABLES #############
 
 td <- Sys.Date()
 ## fetch and reshape data from DataHub
@@ -43,8 +43,8 @@ covid_keycountries_counts <- covid_keycountries_counts %>% select(c(Date, rankin
 # covid_keycountries_counts_pivoted$Regions <- covid_keycountries_counts_pivoted$Regions %>% factor(labels = ranking_confirmed)
 
 
-
-plotConfirmed <- covid_keycountries_counts_pivoted %>% 
+# plot of confirmed cases
+plotCases <- covid_keycountries_counts_pivoted %>% 
   plot_ly(
     x = ~ Date,
     y = ~ `Confirmed Counts`,
@@ -84,8 +84,8 @@ covid_keycountries_counts_pivoted %>%   ggplot() + geom_line(aes(x = Date, y = `
 
 # general styling
 colors <- list(
-  background = '#111111',
-  text = '#7FDBFF'
+  background = '#FFFFFF', # white background
+  text = '#343a40' # dark-grey text 
 )
 
 
@@ -93,8 +93,8 @@ colors <- list(
 ################### DASH WEB APP ###################
 
 app <- Dash$new(external_stylesheets = 
-                  # "https://files.dsury.com/css/lux/bootstrap.min.css"
-                  "https://codepen.io/chriddyp/pen/bWLwgP.css"
+  "https://files.dsury.com/css/lux/bootstrap.min.css"
+  # "https://codepen.io/chriddyp/pen/bWLwgP.css"
                 )
 
 
@@ -104,10 +104,13 @@ plotStyle <-  list(title='Deaths by Region',
                    font = list(color = colors$text))
 
 
-regions.vec <- covid_combined %>% pull(`Country/Region`) %>% unique() # supply to dropdown
-regions.vec <- c('Total', regions.vec)
 
+## Region 
 
+# regions.vec <- covid_combined %>% pull(`Country/Region`) %>% unique() # supply to dropdown
+# regions.vec <- c('Total', regions.vec)
+
+# top regions to display on dropdown
 regions.list <- list(
   list(label = "Global Total", value = "Global"),
   list(label = "United States", value = "US"),
@@ -120,14 +123,22 @@ regions.list <- list(
   list(label = "United Kingdom", value = "United Kingdom")
 )
 
+
+
+# region <- "US" # from drop-down
+
 regions.dropdown <- list(
   dccDropdown(
     options = regions.list,
-    value = 'US' # the default upon loading
-  )
+    value = "US", # the default upon loading
+    id = 'regions-dropdown',
+    searchable = FALSE,
+    placeholder = "Select a region..."
+  ),
+  htmlDiv(id = 'output-container')
 )
 
-region <- "United Kingdom" # from drop-down
+
 
 
 if (region == 'Global') {
@@ -147,8 +158,6 @@ if (region == 'Global') {
 
 
 
-### cleaner implementation of app
-
 
 # current death count
 deathCounts <- htmlDiv(  htmlH1(children = N.deaths),
@@ -161,11 +170,15 @@ deathCounts <- htmlDiv(  htmlH1(children = N.deaths),
 appTitle <- htmlDiv(children = "How important is social distancing at times like these with COVID-19? Why do we need travel restrictions, stay-at-home orders, and closures at restaurants and events? Our app helps you visualize the differences in risk and effects of close social interaction at this time. 
 
 Toggle through decisions like not attending large social events and see how these can drastically decrease the number of elderly and at-risk people indirectly harmed by you!
-")
+",
+  style = list(
+    "font-size" = "10pt",
+    "color" = colors$text
+  ))
 
 
 casesPlot <- dccGraph(
-  figure = plotConfirmed,
+  figure = plotCases,
   style = plotStyle
   # layout = plotStyle
 )
@@ -192,23 +205,41 @@ deathPlot <- dccGraph(
 )
 
 
+centerNarrow <- list(
+  # backgroundColor = colors$background,
+  # color = colors$text,
+  textAlign = 'center',
+  marginLeft = 'auto',
+  marginRight = 'auto',
+  # className = 'container',
+  width = "70%"
+  # padding = "30px"
+)
+
 
 app$layout(
+  htmlDiv(regions.dropdown, style = centerNarrow),
   htmlDiv(
     list(
       deathCounts,
       appTitle,
-      # regions.dropdown,
-      casesPlot,
-      deathPlot
+      casesPlot
+      # deathPlot
     ),
-    style = list(
-      # backgroundColor = colors$background, 
-      # color = colors$text,
-                 textAlign = 'center'
-                 )
+    style = centerNarrow
   )
 )
+
+# change region from dropdown => change metrics
+app$callback(
+  output = list(id = 'output-container', property = 'children'),
+  params = list(input('regions-dropdown', 'value')),
+  function(dropdown_value) {
+    region <- dropdown_value
+    return(dropdown_value)
+  }
+)
+
 
 
 app$run_server()

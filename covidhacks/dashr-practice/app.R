@@ -1,79 +1,78 @@
-# library(plotly)
+library(tidyverse)
 library(dash)
 library(dashCoreComponents)
 library(dashHtmlComponents)
 
+
+df <- read.csv(file = "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv", stringsAsFactor=FALSE, check.names=FALSE) %>% as_tibble()
+
+continents <- unique(df$continent)
+years <- unique(df$year)
+
+
+#################################
+
 app <- Dash$new()
 
 
-thing1 <- list(
-    dccInput(id='my-id', value='initial value', type='text'),
-    htmlDiv(id='my-div'))
-
-thing2 <- list(
-  dccDropdown(
-    options=list(
-      list(label="New York City", value="NYC"),
-      list(label="Montréal", value="MTL"),
-      list(label="San Francisco", value="SF")
-    ),
-    value="MTL",
-    id="my-dropdown"
-  ),
-  htmlDiv(id="output-container")
-)
-
-sliderthing <- list(
+graph.and.slider <- list(
+  dccGraph(id = 'graph-with-slider'), # has 'figure' property
   dccSlider(
-    id = 'my-slider',
-    min = -20,
-    max = 20, 
-    step = 1,
-    value = 5
-  ),
-  htmlDiv(id = 'slider-output-container')
+    id = 'year-slider',
+    min = 0,
+    max = length(years) - 1,
+    marks = years,
+    value = 0 # <------ input of app (adjusted by slider)
+  )
 )
 
+###########  slider  #############
 
+# dccSlider starts from 0;
 app$layout(
-  htmlDiv( thing1,
-    # put this htmlDiv and dccInput together in a list 
-      # INSIDE another htmlDiv
-      # providing children to this would be overwritten by the callback anyway
-    ),
-  htmlDiv( thing2),
-  htmlDiv( sliderthing)
+  htmlDiv(
+    graph.and.slider
+  )
 )
 
-
-
-# text box
 app$callback(
-  output = list(id='my-div', property='children'),
-  params = list(input(id='my-id',
-                      property='value')),
-  function(input_value) {
-    sprintf("textbox value is \"%s\"", input_value)
-  })
-
-# dropdown
-app$callback(
-  output('output-container', 'children'),
-             params = list(input('my-dropdown', 'value')),
-             function(dropdown_value) {
-               sprintf("dropdown value is \"%s\"", dropdown_value)
-             })
-
-#slider callback
-
-
-app$callback(
-  output(id = 'slider-output-container', property = 'children'),
-  params=list(input(id = 'my-slider', property = 'value')),
-  function(value) {
-    sprintf("slider value is %0.1f", value)
-  })
-
-
+  output = list(id='graph-with-slider', property='figure'),  ## puts it back into the figure?
+  params = list(input(id='year-slider', property='value')), ## input params
+  
+  function(selected_year_index) {
+    
+    which_year_is_selected <- which(df$year == years[selected_year_index + 1])
+    
+    # recall lapply(lst, fun) just returns a list of the function evaluated at the values of that list
+    traces <- lapply(
+      continents,
+      function(cont) { # for each cont in continents
+           which_continent_is_selected <- which(df$continent == cont)
+           
+           df_sub <- df[intersect(which_year_is_selected, which_continent_is_selected), ]
+           
+           with(df_sub,
+                 list(
+                   x = gdpPercap, y = lifeExp,
+                   opacity=0.5, text = country, mode = 'markers',
+                   marker = list(size = 15, line = list(width = 0.5, color = 'white')),
+                   name = cont
+                 )
+           )
+     }
+    )
+    
+    return(list(
+      data = traces,
+      layout= list(
+        xaxis = list(type = 'log', title = 'GDP Per Capita'),
+        yaxis = list(title = 'Life Expectancy', range = c(20,90)),
+        margin = list(l = 40, b = 40, t = 10, r = 10),
+        legend = list(x = 0, y = 1),
+        hovermode = 'closest'
+      )
+    ))
+  }
+)
 
 app$run_server()
