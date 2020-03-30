@@ -24,6 +24,8 @@ option_indicator <- lapply(available_indicators,
 
 app$layout(
   htmlDiv(list(
+    
+    
     htmlDiv(list(
       htmlDiv(list(
         dccDropdown(
@@ -39,6 +41,7 @@ app$layout(
           labelStyle = list(display = 'inline-block')
         )
       ), style = list(width = '48%', display = 'inline-block')),
+      
       htmlDiv(list(
         dccDropdown(
           id = 'yaxis-column',
@@ -54,6 +57,8 @@ app$layout(
         )
       ), style = list(width = '48%', float = 'display', display = 'inline-block'))
     )),
+    
+    
     dccGraph(id = 'indicator-graphic'),
     dccSlider(
       id = 'year--slider',
