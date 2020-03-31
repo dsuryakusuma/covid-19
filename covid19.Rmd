@@ -16,6 +16,8 @@ library(pdftools)
 library(pdfsearch)
 library(kableExtra)
 library(jsonlite)
+library(plotly)
+
 
 
 qkable <- function(x, height="360px") {
@@ -196,23 +198,7 @@ counts <- counts %>% editrow(n = 6,
 <!-- Let's do a custom tailored scrape as proof of concept.  -->
 
 ```{r, warning = FALSE, message = FALSE, eval = FALSE, include = FALSE}
-# setwd("covid-19")
-# getwd()
-# tmp <- system.file('pdf', paste0("covid-19/", pdf.paths[7]), 
-                   # package = 'pdfsearch')
-
 tmp <- pdf_text(pdf = paste0("covid-19/", pdf.paths[7]))
-
-# result <- tmp[[1]] %>% 
-#   str_split(pattern = "\\n") 
-# %>% 
-#   grepl(pattern = " confirmed")
-
-# %>%
-#   keyword_search(keyword = c( ' confirmed', ' globally'),
-#                  path = FALSE)
-
-# tmp %>% str_split("\\n") %>% grep("^confirmed")
 
 result <- keyword_search(tmp[[1]], # first page only
                          keyword = c(" confirmed ", " suspected ", " severe ", " deaths "),
@@ -279,10 +265,6 @@ getValues <- function(n, pattern) {
                            path = FALSE,
                            surround_lines = 0)
 
-  # txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
-  # txt <- txt %>% str_split(pattern = " China ") #### maybe remove
-  # txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
-  
   txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
   txt <- txt %>% str_split(pattern = " China ", simplify = FALSE)
   txt <- txt %>% str_split(pattern = "•", simplify = FALSE, n = 2)
@@ -357,9 +339,7 @@ result.n <- keyword_search(parsedsitrep[[1]], # only first page
 txt <- result.n$line_text %>% str_split(pattern = "Globally", simplify = FALSE)
 txt <- txt %>% str_split(pattern = "laboratory", simplify = FALSE)
 txt <- txt %>% str_split(pattern = " China ", simplify = FALSE)
-# txt <- txt %>% str_split(pattern = "•", simplify = FALSE, n = 2)
-# txt <- txt %>% str_split(pattern = "Outside of China", simplify = FALSE)
-# txt
+
 
 for (i in 1:length(txt)) {
   for (j in 1:length(txt[[i]])) {
@@ -521,6 +501,7 @@ covid.deaths$region <- factor(covid.deaths$region, levels = c("global_deaths", "
 
 # change 0's in counts to NA to not be plotted (starting 3-17-2020, we only use global data)
 covid.confirmed$count <- covid.confirmed$count %>% na_if(y = 0)
+covid.deaths$count <- covid.deaths$count %>% na_if(y = 0)
 
 
 covid.confirmed %>% qkable()
@@ -553,7 +534,7 @@ for the apparent large increase in cases compared to prior situation reports.
 It's important to understand this change in reporting before conducting estimations and projections. 
 
 ```{r}
-covid.deaths %>% ggplot() + geom_jitter(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Death Counts, Reported by WHO')
+covid.deaths %>% ggplot() + geom_point(aes(x = `date`, y = `count`, color = `region`)) + ggtitle('Coronavirus Death Counts, Reported by WHO')
 ```
 
 There certainly are signs of stabilization in death counts within China, but it is of course still too early to say this conclusively. Notice that the cumulatie number of deaths outside of china has surpassed that from within China, and as such, the World Health Organization has changed its reporting structure to offer data at a much finer granularity. 
@@ -566,7 +547,7 @@ Most developers and researchers are using data gathered and provided by either t
 Let's first take a look at DataHub's timeseries data. 
 
 
-```{r}
+```{r, eval = FALSE}
 #from DataHub
 json_file <- 'https://datahub.io/core/covid-19/datapackage.json'
 json_data <- fromJSON(paste(readLines(json_file), collapse=""))
@@ -591,25 +572,83 @@ td <- Sys.Date()
 
 
 covid_combined <- as_tibble(read_csv(file =  "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv"))
-
-covid_combined %>% slice(1:50) %>% qkable()
-
-# "https://datahub.io/core/covid-19/r/worldwide-aggregated.csv"
-# "https://datahub.io/core/covid-19/r/countries-aggregated.csv"
-
 covid_keycountries_counts <- as_tibble( read_csv("https://datahub.io/core/covid-19/r/key-countries-pivoted.csv") )
 
-# covid_keycountries %>% slice(1:50) %>% qkable()
 
 
-covid_keycountries_counts %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) )
+covid_combined <- as_tibble(read_csv(file = "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv"))
+covid_keycountries_counts <- as_tibble(read_csv("https://datahub.io/core/covid-19/r/key-countries-pivoted.csv"))
 
 
-covid_keycountries_counts_pivoted %>%  
-  ggplot() + geom_line(aes(x = Date, y = `Confirmed Counts`, color = Regions))
+# normalize some data (US, UK)
+covid_combined$`Country/Region`[which(covid_combined$`Country/Region` == "US")] <- "United States"
+covid_keycountries_counts <- covid_keycountries_counts %>% rename(`United States` = US)
+covid_keycountries_counts <- covid_keycountries_counts %>% rename(`United Kingdom` = `United_Kingdom`)
 
-covid_keycountries_counts %>% pivot_longer(cols = - c('Date'), names_to = 'Region', values_to = 'Confirmed') %>% ggplot() + geom_line(aes(x = Date, y = Confirmed, color = Region) ) + facet_wrap( ~ Region)
 
+covid_keycountries_counts_pivoted <- covid_keycountries_counts %>%
+  pivot_longer(cols = - c("Date"),
+               names_to = "Regions",
+               values_to = "Confirmed Counts")
+                
+# get death counts of key countries
+keycountries <- covid_keycountries_counts_pivoted$Regions %>% unique()
+    
+
+covid_keycountries_deaths_pivoted <- covid_combined %>% 
+  filter(`Country/Region` %in% keycountries) %>%
+  select(c(Date, `Country/Region`, Deaths)) 
+
+  covid_keycountries_deaths <- covid_keycountries_deaths_pivoted %>%
+    pivot_wider(names_from = `Country/Region`,
+                values_from = Deaths,
+                values_fn = list(Deaths = max))
+
+covid_keycountries_recovered_pivoted <- covid_combined %>% 
+  filter(`Country/Region` %in% keycountries) %>%
+  select(c(Date, `Country/Region`, Recovered)) 
+
+  covid_keycountries_recovered <- covid_keycountries_recovered_pivoted %>%
+    pivot_wider(names_from = `Country/Region`,
+                values_from = Recovered,
+                values_fn = list(Recovered = max))
+
+
+mostrecent <- max(covid_keycountries_counts$Date)
+ranking_confirmed <- covid_keycountries_counts_pivoted %>% 
+  filter(Date == mostrecent) %>% 
+  select(c(Regions, `Confirmed Counts`)) %>%
+  arrange( desc(`Confirmed Counts`) ) %>%
+  pull('Regions')
+
+# reorder columns in decreasing order:
+covid_keycountries_counts <- covid_keycountries_counts %>% select(c(Date, ranking_confirmed))
+
+
+
+
+
+plotCases <- covid_keycountries_counts_pivoted %>% 
+  plot_ly(
+    x = ~ Date,
+    y = ~ `Confirmed Counts`,
+    color = ~ Regions,
+    mode = 'lines'
+  ) %>% layout(title = 'Confirmed Cases of COVID-19 by Region',
+    legend = list(x = 0, y = 1, font = list(size = 12), bgcolor = "#F2F2F2"))
+
+plotDeaths <- covid_keycountries_deaths_pivoted %>%
+  plot_ly(
+    x = ~ Date,
+    y = ~ Deaths,
+    color = ~ `Country/Region`,
+    mode = 'lines'
+  ) %>% layout(title = 'Deaths to COVID-19 by Region',
+    legend = list(x = 0, y = 1, font = list(size = 12), bgcolor = "#F2F2F2"))
+
+plotCases
+
+plotDeaths
 
 ```
 
